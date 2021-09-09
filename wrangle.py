@@ -9,8 +9,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+import sklearn
 from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
+
+import os
 
 from env import user, host, password
 
@@ -20,6 +23,8 @@ def get_connection(db, user=user, host=host, password=password):
     It takes db argument as a string name.
     '''
     return f'mysql+pymysql://{user}:{password}@{host}/{db}'
+
+
 
 def new_zillow_data():
     '''
@@ -35,6 +40,8 @@ def new_zillow_data():
     df = pd.read_sql(sql_query,get_connection('zillow'))
     return df
 
+
+
 def get_zillow_data():
         '''
         This function gets telco data from csv, or otherwise from Codeup database.
@@ -45,6 +52,8 @@ def get_zillow_data():
             df = new_zillow_data()
             df.to_csv('zillow.csv')
         return df
+
+
 
 def remove_outliers(df, k, col_list):
     '''
@@ -66,23 +75,41 @@ def remove_outliers(df, k, col_list):
         return df
 
 
-def wrangle_zillow(df):
+
+def wrangle_zillow():
+    # Get zillow data from csv or from database if there is no csv
+    df = get_zillow_data()
+    df = pd.DataFrame(df)
+    # Lets get shorter and easier to understand names
+    df = df.rename(columns= {'bedroomcnt' : 'bedrooms', 'bathroomcnt' : 'bathrooms', 'calculatedfinishedsquarefeet' : 'area_sqft', 'taxvaluedollarcnt' : 'tax_value', 'yearbuilt' : 'year_built', 'taxamount' : 'tax_amount'})
+
+    # Remove outliers from the dataframe
+    df = remove_outliers(df, 1.5, df.columns)
+    
     # Replace a whitespace sequence or empty with a NaN value 
     # and reassign this manipulation to df.
     df = df.replace(r'^\s*$', np.nan, regex=True)
 
-    # Remove outliers from the dataframe
-    df = remove_outliers(df, 1.5, df.columns)
+    # Nulls are rare for bedrooms and bathrooms
+    # Nulls may not appear in train after splitting
+    # Thus, I am dropping nulls for bedroom and bathroom now
+    df.bedrooms.dropna()
+    df.bathrooms.dropna()
 
     # fips appears to be a categorical number (i.e. like a zip code)
     # year_built may also be categorical if we aren't looking at age
     df.fips = df.fips.astype(object)
     df.year_built = df.year_built.astype(object)
+    
+    return df
 
+
+
+def wrangle_split(df):
     # Split the data into train, validate, and test subsets
     train_validate, test = train_test_split(df, test_size=.2, random_state=123)
     train, validate = train_test_split(df, test_size=.3, random_state=123)
-
+    
     # Need to fill nulls for: year_built, area_sqft, tax_value
 
     # Create -> Fit -> Use
@@ -112,7 +139,38 @@ def wrangle_zillow(df):
     train[['tax_value']]=imputer_tax.transform(train[['tax_value']])
     validate[['tax_value']]=imputer_tax.transform(validate[['tax_value']])
     test[['tax_value']]=imputer_tax.transform(test[['tax_value']])
-
+    
     return train, validate, test
 
 
+
+def scale_zillow(train, validate, test):
+    # Create the object
+    scaler = sklearn.preprocessing.MinMaxScaler()
+
+    # Fit the object
+    # Scalers should only be fit to train to prevent data leakage
+    scaler.fit(train)
+
+    # Use the object
+    # the same object that was fitted to train can be used on validate and test
+    train_scaled = scaler.transform(train)
+    validate_scaled = scaler.transform(validate)
+    test_scaled = scaler.transform(test)
+
+    # For some reason, the minmax scaler converted the dataframes into series
+    # and renamed the columns 0-6
+
+    # The following lines convert those series back to dataframes 
+    # and restore their column names
+
+    train_scaled = pd.DataFrame(train_scaled)
+    train_scaled = train_scaled.rename(columns={0:'bedrooms', 1:'bathrooms', 2:'area_sqft', 3:'tax_value', 4:'year_built',5:'tax_amount', 6:'fips'})
+
+    validate_scaled = pd.DataFrame(validate_scaled)
+    validate_scaled = validate_scaled.rename(columns={0:'bedrooms', 1:'bathrooms', 2:'area_sqft', 3:'tax_value', 4:'year_built',5:'tax_amount', 6:'fips'})
+
+    test_scaled = pd.DataFrame(test_scaled)
+    test_scaled = test_scaled.rename(columns={0:'bedrooms', 1:'bathrooms', 2:'area_sqft', 3:'tax_value', 4:'year_built',5:'tax_amount', 6:'fips'})
+
+    return train_scaled, validate_scaled, test_scaled
