@@ -24,7 +24,7 @@ def regression_errors(y, yhat):
     '''This functions takes y and yhat and returns regression error values.'''
 
     # MSE2
-    mse2 = mean_squared_error(y, df.yhat)
+    mse2 = mean_squared_error(y, yhat)
     print('MSE is ',round(mse2,2))
 
     # RMSE
@@ -32,11 +32,11 @@ def regression_errors(y, yhat):
     print('RMSE is  ',round(rmse,2))
 
     # SSE, sum of squared error
-    sse2 = mean_squared_error(y, df.yhat)*len(df)
+    sse2 = mean_squared_error(y, yhat)*len(y)
     print('SSE is ',round(sse2,2))
 
     # ESS
-    ess = sum((df.yhat -y.mean())**2)
+    ess = sum((yhat -y.mean())**2)
     print('ESS is ',round(ess,2))
 
     return mse2, rmse, sse2, ess
